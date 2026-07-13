@@ -2988,7 +2988,7 @@ function mkReaper(){
   b.x=150;b.y=-150;b.trk=0;b.sang=0;b.open=1;b.openT=1;
   b.px=b.x;b.py=b.y;b.bank=0;b.pitch=0;
   b.form=1;b.tf=0;b.tur=Math.PI/2;b.rec=0;b.beam=null;b.kx=0;b.ky=0;
-  b.hd=Math.PI/2;b.sc=1;b.ls=1;b.tw=0;b.tl=0;b.tt=0;
+  b.hd=Math.PI/2;b.sc=1;b.ls=1;b.tw=0;b.tl=0;b.tt=0;b.sawp=null;
   b.atk={m:'enter',t:0,i:0};
   const coreHit=b.hit.bind(b);
   b.hit=function(dmg,part){
@@ -3000,7 +3000,7 @@ function mkReaper(){
     if(b.form===1){
       b.hp-=dmg;b.flash=0.2;
       if(b.hp<=0&&b.atk.m!=='transform'){b.hp=0;
-        b.atk={m:'transform',t:0,i:0};b.tf=0;b.tt=0;b.tw=0;b.tl=0;b.openT=0;b.beam=null;eBul.length=0;
+        b.atk={m:'transform',t:0,i:0};b.tf=0;b.tt=0;b.tw=0;b.tl=0;b.openT=0;b.beam=null;b.sawp=null;eBul.length=0;
         b.q1=b.q2=b.q3=b.q4=b.q5=b.q6=b.q7=0;
         banner('伐採機 大破 — 変形シーケンス開始…！',2.4);AU.warn();AU.clank();shake=12;
         addExpl(b.x,b.y+20,1.5,true);}
@@ -3078,6 +3078,16 @@ function mkReaper(){
           eShot(b.beam.x(),b.beam.y(),b.beam.ang,300,'needle');b.beam.fired++;b.beam.tt=0.045;}
         if(b.beam.fired>=b.beam.n)b.beam=null;}}
     A.t-=dt;
+    if(b.form===1&&b.sawp){ /* the thrown blade: out fast, then boomerang home */
+      const S=b.sawp;S.t+=dt;S.rot+=dt*22*S.s;
+      if(S.ph==='out'){S.x+=S.vx*dt;S.y+=S.vy*dt;
+        if(S.t>0.62||S.x<6||S.x>294||S.y>394||S.y<2)S.ph='back';}
+      else{const H2=b.hubs(),h2=H2[S.s<0?0:1];
+        const dx=h2.x-S.x,dy=h2.y-S.y,dd=Math.hypot(dx,dy);
+        if(dd<16){b.sawp=null;AU.clank();shake=Math.max(shake,2);}
+        else{S.x+=dx/dd*330*dt;S.y+=dy/dd*330*dt;}}
+      if(b.sawp&&Math.random()<0.5)parts.push({x:S.x+rnd(-14,14),y:S.y+rnd(-14,14),
+        vx:rnd(-40,40),vy:rnd(-30,50),life:0.2,t:0,s:rnd(1,2),g:0,ty:'px',col:'#e8eef4'});}
     if(A.m==='combine'){ /* form 1 — saws seal the front… then the sudden lunge */
       b.openT=0;
       if(A.i===0){if(b.open<0.15){A.i=1;A.t=0.6;AU.warn();shake=Math.max(shake,2);}}
@@ -3117,11 +3127,12 @@ function mkReaper(){
     b.trk+=(b.form===2?70:22)*dt;
     if(Math.random()<0.2)dust(b.x+rnd(-60,60)*b.sc,b.y+rnd(44,78),'#6a5028');
     if(A.m==='idle'){if(A.t<=0){
-      const pool=b.form===1
+      let pool=b.form===1
         ?(ph===1?['fire','wood','combine']
           :(ph===2?['fire','wood','combine','combine']
-          :['fire','wood','wood','combine','combine']))
+          :['fire','wood','sawtoss','combine','sawtoss','combine']))
         :(ph===3?['cannon','rocket','laser','dash','mg','rocket']:['cannon','laser','dash','mg','rocket']);
+      if(b.form===1&&b.sawp)pool=pool.filter(m=>m!=='combine'&&m!=='sawtoss');
       A.m=pool[(rnd(0,pool.length))|0];A.i=0;
       A.t=A.m==='dash'?0.45:A.m==='rocket'?0.55:0;
       if(A.m==='fire'||A.m==='wood')b.openT=1;
@@ -3139,6 +3150,18 @@ function mkReaper(){
           vx:rnd(-50,50),vy:rnd(-60,20),life:0.4,t:0,s:rnd(1.5,2.5),g:90,ty:'px',col:'#c9a05e'});
         A.i++;}
       A.t=0.34;if(A.i>=5+ph){A.m='idle';A.t=1.6/spd;}}
+    else if(A.m==='sawtoss'){ /* near death: hurl a spinning saw straight at the hero */
+      b.openT=1;
+      if(A.i===0){
+        if(!A.s)A.s=P.x<b.x?-1:1;
+        b.sang+=dt*22;
+        if(b.open>0.8){A.i=1;A.t=0.5;AU.warn();}}
+      else if(A.t<=0){
+        const H2=b.hubs(),h2=H2[A.s<0?0:1],a=aimAng(h2.x,h2.y);
+        b.sawp={s:A.s,x:h2.x,y:h2.y,vx:Math.cos(a)*(300+rank*20)*spd,
+          vy:Math.sin(a)*(300+rank*20)*spd,t:0,rot:b.sang*A.s,ph:'out'};
+        AU.exb();shake=Math.max(shake,4);
+        A.s=0;A.m='idle';A.t=2.2/spd;}}
     else if(A.m==='cannon'&&A.t<=0){ /* tank: big shells from the main gun */
       const px=b.x+Math.cos(b.tur)*88*b.sc,py=b.y+4*b.sc+Math.sin(b.tur)*88*b.sc;
       eShot(px,py,b.tur+rnd(-0.04,0.04),(78+rank*10)*spd,'brkt');
@@ -3173,10 +3196,13 @@ function mkReaper(){
   b.circles=function(){
     if(b.form===1&&b.atk.m!=='transform'){
       const sealed=b.open<0.6,bodyPart=sealed?9:-1,H2=b.hubs();
-      return[{x:H2[0].x,y:H2[0].y,r:25,part:9},{x:H2[1].x,y:H2[1].y,r:25,part:9},
+      const c=[{x:H2[0].x,y:H2[0].y,r:b.sawp&&b.sawp.s<0?10:25,part:9},
+        {x:H2[1].x,y:H2[1].y,r:b.sawp&&b.sawp.s>0?10:25,part:9},
         {x:b.x,y:b.y+6,r:42,part:bodyPart},
         {x:b.x-56,y:b.y+8,r:20,part:bodyPart},{x:b.x+56,y:b.y+8,r:20,part:bodyPart},
-        {x:b.x,y:b.y-34,r:22,part:bodyPart}];}
+        {x:b.x,y:b.y-34,r:22,part:bodyPart}];
+      if(b.sawp)c.push({x:b.sawp.x,y:b.sawp.y,r:20,part:9});
+      return c;}
     if(b.atk.m==='transform')return[{x:b.x,y:b.y+6,r:42+18*(b.tl||0),part:9}];   // shielded by the blast
     const C=(ox,oy,r)=>{const p=b.pt(ox,oy);return{x:p.x,y:p.y,r:r*b.sc,part:-1};};
     return[C(0,6,42),C(-64,8,20),C(64,8,20),C(0,-50,26),C(0,66,28),
@@ -3357,21 +3383,10 @@ function mkReaper(){
     const sawA=b.form!==1?0:b.atk.m==='transform'?clamp(1-(((b.tt||0)-3.2)/1.6),0,1):1;
     if(sawA>0){
       ctx.save();ctx.globalAlpha=sawA;
-      const H2=b.hubs();
-      for(const h2 of H2){const s=h2.s;
-        const sx=x+s*46,sy=y+10;
-        const ex=(sx+h2.x)/2+s*16,ey=(sy+h2.y)/2-6;
-        ctx.strokeStyle='#23290f';ctx.lineWidth=9;ctx.lineCap='round';
-        ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.lineTo(h2.x,h2.y);ctx.stroke();
-        ctx.strokeStyle='#59661e';ctx.lineWidth=5;
-        ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.lineTo(h2.x,h2.y);ctx.stroke();
-        ctx.strokeStyle='#a3b23c';ctx.lineWidth=1.5;
-        ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.lineTo(h2.x,h2.y);ctx.stroke();
-        ctx.fillStyle='#2c333c';ctx.beginPath();ctx.arc(ex,ey,5,0,TAU);ctx.fill();
-        ctx.fillStyle='#59661e';ctx.beginPath();ctx.arc(ex-1,ey-1,3.4,0,TAU);ctx.fill();
-        ctx.save();ctx.translate(h2.x,h2.y);
+      const blade=(bx,by,rot)=>{ /* one big circular saw, reused by arm and thrown blade */
+        ctx.save();ctx.translate(bx,by);
         ctx.fillStyle='rgba(10,14,6,0.4)';ctx.beginPath();ctx.arc(3,4,26,0,TAU);ctx.fill();
-        ctx.rotate(b.sang*s);
+        ctx.rotate(rot);
         const sg=ctx.createRadialGradient(-6,-6,3,0,0,26);
         sg.addColorStop(0,'#e8eef4');sg.addColorStop(0.55,'#9aa6b2');sg.addColorStop(1,'#525c68');
         ctx.fillStyle=sg;ctx.beginPath();ctx.arc(0,0,24,0,TAU);ctx.fill();
@@ -3384,16 +3399,43 @@ function mkReaper(){
         for(const rr of[9,16]){ctx.beginPath();ctx.arc(0,0,rr,0,TAU);ctx.stroke();}
         ctx.fillStyle='#20252c';ctx.beginPath();ctx.arc(0,0,6,0,TAU);ctx.fill();
         ctx.fillStyle='#8f99a4';ctx.beginPath();ctx.arc(-1,-1,3.4,0,TAU);ctx.fill();
-        ctx.restore();
+        ctx.restore();};
+      const H2=b.hubs();
+      for(const h2 of H2){const s=h2.s;
+        const sx=x+s*46,sy=y+10;
+        const ex=(sx+h2.x)/2+s*16,ey=(sy+h2.y)/2-6;
+        ctx.strokeStyle='#23290f';ctx.lineWidth=9;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.lineTo(h2.x,h2.y);ctx.stroke();
+        ctx.strokeStyle='#59661e';ctx.lineWidth=5;
+        ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.lineTo(h2.x,h2.y);ctx.stroke();
+        ctx.strokeStyle='#a3b23c';ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.lineTo(h2.x,h2.y);ctx.stroke();
+        ctx.fillStyle='#2c333c';ctx.beginPath();ctx.arc(ex,ey,5,0,TAU);ctx.fill();
+        ctx.fillStyle='#59661e';ctx.beginPath();ctx.arc(ex-1,ey-1,3.4,0,TAU);ctx.fill();
+        if(b.sawp&&b.sawp.s===s){ /* this arm's blade is downrange — bare spindle */
+          ctx.fillStyle='#20252c';ctx.beginPath();ctx.arc(h2.x,h2.y,7,0,TAU);ctx.fill();
+          ctx.fillStyle='#8f99a4';ctx.beginPath();ctx.arc(h2.x-1,h2.y-1,4,0,TAU);ctx.fill();}
+        else{
+          blade(h2.x,h2.y,b.sang*s);
+          ctx.globalCompositeOperation='lighter';
+          ctx.strokeStyle='rgba(255,255,255,0.30)';ctx.lineWidth=2;
+          ctx.beginPath();ctx.arc(h2.x,h2.y,20,b.sang*s*1.7,b.sang*s*1.7+0.9);ctx.stroke();
+          ctx.fillStyle='rgba(200,215,230,0.07)';
+          ctx.beginPath();ctx.arc(h2.x,h2.y,26,0,TAU);ctx.fill();
+          if(b.atk.m==='sawtoss'&&b.atk.s===s&&!b.sawp)  /* spin-up telegraph */
+            glow(GLO.red,h2.x,h2.y,36,0.4+0.35*Math.sin(t*20));
+          ctx.globalCompositeOperation='source-over';
+          if(b.atk.m==='wood'&&Math.random()<0.4)
+            parts.push({x:h2.x+rnd(-16,16),y:h2.y+rnd(-16,16),vx:rnd(-60,60),vy:rnd(-40,40),
+              life:0.3,t:0,s:rnd(1.2,2.2),g:100,ty:'px',col:'#c9a05e'});}}
+      if(b.sawp){ /* the flying blade */
+        const S=b.sawp;
+        blade(S.x,S.y,S.rot);
         ctx.globalCompositeOperation='lighter';
-        ctx.strokeStyle='rgba(255,255,255,0.30)';ctx.lineWidth=2;
-        ctx.beginPath();ctx.arc(h2.x,h2.y,20,b.sang*s*1.7,b.sang*s*1.7+0.9);ctx.stroke();
-        ctx.fillStyle='rgba(200,215,230,0.07)';
-        ctx.beginPath();ctx.arc(h2.x,h2.y,26,0,TAU);ctx.fill();
-        ctx.globalCompositeOperation='source-over';
-        if(b.atk.m==='wood'&&Math.random()<0.4)
-          parts.push({x:h2.x+rnd(-16,16),y:h2.y+rnd(-16,16),vx:rnd(-60,60),vy:rnd(-40,40),
-            life:0.3,t:0,s:rnd(1.2,2.2),g:100,ty:'px',col:'#c9a05e'});}
+        ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=2.5;
+        ctx.beginPath();ctx.arc(S.x,S.y,20,S.rot*1.7,S.rot*1.7+1.2);ctx.stroke();
+        glow(GLO.red,S.x,S.y,34,S.ph==='out'?0.5:0.28);
+        ctx.globalCompositeOperation='source-over';}
       if(b.open<0.3&&b.atk.m!=='transform'){ctx.globalCompositeOperation='lighter';
         glow(GLO.white,x,y+62,18,(0.3-b.open)*2.4*(0.6+0.4*Math.sin(t*24)));
         ctx.globalCompositeOperation='source-over';}
@@ -4953,7 +4995,12 @@ function render(dt){
       blit(e.spr,e.x,e.y,e.rot);ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;}
   }
   /* boss */
-  if(bossObj)bossObj.draw();
+  if(bossObj){bossObj.draw();
+    /* universal hit feedback: any struck part blinks white over the whole body */
+    if(!bossObj.dying&&bossObj.flash>0){ctx.globalCompositeOperation='lighter';
+      const fa=Math.min(0.5,bossObj.flash*1.6);
+      for(const c of bossObj.circles())glow(GLO.white,c.x,c.y,c.r*3,fa);
+      ctx.globalCompositeOperation='source-over';}}
   /* missiles */
   for(const m of missiles){
     ctx.save();ctx.translate(m.x,m.y);ctx.rotate(Math.atan2(m.vy,m.vx)+Math.PI/2);
